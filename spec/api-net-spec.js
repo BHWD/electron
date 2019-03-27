@@ -1363,6 +1363,7 @@ describe('net module', () => {
       const requestUrl = '/requestUrl'
       const customHeaderName = 'Some-Custom-Header-Name'
       const customHeaderValue = 'Some-Customer-Header-Value'
+
       server.on('request', (request, response) => {
         switch (request.url) {
           case requestUrl:
@@ -1375,31 +1376,89 @@ describe('net module', () => {
             handleUnexpectedURL(request, response)
         }
       })
+
       const urlRequest = net.request({
         method: 'GET',
         url: `${server.url}${requestUrl}`
       })
+
       urlRequest.on('response', (response) => {
         const statusCode = response.statusCode
         assert(typeof statusCode === 'number')
         assert.strictEqual(statusCode, 200)
+
         const statusMessage = response.statusMessage
         assert(typeof statusMessage === 'string')
         assert.strictEqual(statusMessage, 'OK')
+
         const headers = response.headers
         assert(typeof headers === 'object')
         assert.deepStrictEqual(headers[customHeaderName.toLowerCase()], customHeaderValue)
+
         const httpVersion = response.httpVersion
         assert(typeof httpVersion === 'string')
         assert(httpVersion.length > 0)
+
         const httpVersionMajor = response.httpVersionMajor
         assert(typeof httpVersionMajor === 'number')
         assert(httpVersionMajor >= 1)
+
         const httpVersionMinor = response.httpVersionMinor
         assert(typeof httpVersionMinor === 'number')
         assert(httpVersionMinor >= 0)
+
         response.pause()
         response.on('data', (chunk) => {})
+        response.on('end', () => { done() })
+        response.resume()
+      })
+      urlRequest.end()
+    })
+
+    it('should discard duplicate headers', (done) => {
+      const requestUrl = '/duplicateRequestUrl'
+      const includedHeader = 'max-forwards'
+      const discardableHeader = 'Max-Forwards'
+
+      const includedHeaderValue = 'max-fwds-val'
+      const discardableHeaderValue = 'max-fwds-val-two'
+
+      server.on('request', (request, response) => {
+        switch (request.url) {
+          case requestUrl:
+            response.statusCode = 200
+            response.statusMessage = 'OK'
+            response.setHeader(includedHeader, includedHeaderValue)
+            response.setHeader(discardableHeader, discardableHeaderValue)
+            response.end()
+            break
+          default:
+            handleUnexpectedURL(request, response)
+        }
+      })
+
+      const urlRequest = net.request({
+        method: 'GET',
+        url: `${server.url}${requestUrl}`
+      })
+
+      urlRequest.on('response', (response) => {
+        const statusCode = response.statusCode
+        assert(typeof statusCode === 'number')
+        assert.strictEqual(statusCode, 200)
+
+        const statusMessage = response.statusMessage
+        assert(typeof statusMessage === 'string')
+        assert.strictEqual(statusMessage, 'OK')
+
+        const headers = response.headers
+        assert(typeof headers === 'object')
+
+        assert.strictEqual(includedHeader in headers, true)
+        assert.strictEqual(discardableHeader in headers, false)
+
+        response.pause()
+        response.on('data', chunk => {})
         response.on('end', () => { done() })
         response.resume()
       })
